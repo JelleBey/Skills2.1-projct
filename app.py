@@ -1,4 +1,4 @@
-# app.py - SECURITY HARDENED VERSION
+# app.py - SECURITY HARDENED + FLEXIBLE IP CONFIGURATION
 from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, status, Cookie, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
@@ -47,14 +47,22 @@ limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# ---------- CORS ---------- FIXED: Removed wildcard
+# ---------- CORS - FLEXIBLE IP CONFIGURATION ----------
+# Get allowed origins from environment variable (comma-separated)
+# Just update .env file when your IP changes!
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "").split(",")
+ALLOWED_ORIGINS = [origin.strip() for origin in ALLOWED_ORIGINS if origin.strip()]
+
+# If no origins specified, allow localhost for development
+if not ALLOWED_ORIGINS:
+    ALLOWED_ORIGINS = ["http://localhost:8000", "http://127.0.0.1:8000"]
+    logger.warning("No ALLOWED_ORIGINS set in .env, using localhost only")
+
+logger.info(f"CORS allowed origins: {ALLOWED_ORIGINS}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://44.195.35.212",
-        "http://44.195.35.212:8000",
-        # Add your domain when you have one: "https://yourdomain.com"
-    ],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
@@ -68,8 +76,6 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    # Add HSTS when you have HTTPS:
-    # response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -82,7 +88,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL not found in environment variables")
 
-# JWT Configuration - FIXED: No fallback, must be set
+# JWT Configuration
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 if not JWT_SECRET_KEY:
     raise RuntimeError("JWT_SECRET_KEY must be set in environment variables for security")
@@ -125,7 +131,6 @@ class UserRegister(BaseModel):
     def validate_name(cls, v):
         if len(v) < 1 or len(v) > 50:
             raise ValueError("Name must be between 1 and 50 characters")
-        # Basic sanitization - only letters, spaces, hyphens
         if not re.match(r"^[a-zA-Z\s\-]+$", v):
             raise ValueError("Name can only contain letters, spaces, and hyphens")
         return v.strip()
@@ -159,7 +164,7 @@ async def close_db_pool():
 # ---------- Authentication Helpers ----------
 def hash_password(password: str) -> str:
     """Hash a password using bcrypt"""
-    salt = bcrypt.gensalt(rounds=12)  # Increased rounds for better security
+    salt = bcrypt.gensalt(rounds=12)
     return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -226,21 +231,16 @@ def validate_image_file(file_bytes: bytes) -> Image.Image:
         raise HTTPException(status_code=400, detail="Empty file uploaded")
     
     try:
-        # Open and verify image
         img = Image.open(io.BytesIO(file_bytes))
         img.verify()
-        
-        # Reopen after verify (verify closes the file)
         img = Image.open(io.BytesIO(file_bytes))
         
-        # Check actual format
         if img.format not in ALLOWED_IMAGE_FORMATS:
             raise HTTPException(
                 status_code=400, 
                 detail=f"Unsupported format. Allowed: {', '.join(ALLOWED_IMAGE_FORMATS)}"
             )
         
-        # Convert to RGB if needed
         if img.mode != 'RGB':
             img = img.convert('RGB')
         
@@ -288,23 +288,20 @@ def register_page():
     return (BASE_DIR / "register.html").read_text(encoding="utf-8")
 
 @app.post("/api/register", response_model=TokenResponse)
-@limiter.limit("3/hour")  # Rate limit: 3 registrations per hour per IP
+@limiter.limit("3/hour")
 async def register(request: Request, user_data: UserRegister, response: Response):
     """Register a new user and set HttpOnly cookie"""
     pool = await get_db_pool()
     
     try:
         async with pool.acquire() as conn:
-            # Check if user already exists
             existing = await conn.fetchrow("SELECT id FROM users WHERE email = $1", user_data.email)
             if existing:
                 logger.warning(f"Registration attempt with existing email: {user_data.email}")
                 raise HTTPException(status_code=400, detail="Email already registered")
             
-            # Hash password
             hashed_pw = hash_password(user_data.password)
             
-            # Insert user
             user = await conn.fetchrow(
                 """INSERT INTO users (email, password_hash, first_name, last_name) 
                    VALUES ($1, $2, $3, $4) 
@@ -314,16 +311,13 @@ async def register(request: Request, user_data: UserRegister, response: Response
         
         logger.info(f"New user registered: {user['email']}")
         
-        # Create token
         token = create_access_token(user["id"], user["email"])
         
-        # Set HttpOnly cookie
-        # For production with HTTPS: secure=True, samesite="strict"
         response.set_cookie(
             key="access_token",
             value=token,
             httponly=True,
-            samesite="strict",  # Changed from "lax" for better CSRF protection
+            samesite="strict",
             secure=False,  # Change to True when using HTTPS
             max_age=JWT_EXPIRATION_HOURS * 3600
         )
@@ -345,7 +339,7 @@ async def register(request: Request, user_data: UserRegister, response: Response
         raise HTTPException(status_code=500, detail="Registration failed")
 
 @app.post("/api/login", response_model=TokenResponse)
-@limiter.limit("5/minute")  # Rate limit: 5 login attempts per minute per IP
+@limiter.limit("5/minute")
 async def login(request: Request, credentials: UserLogin, response: Response):
     """Login a user and set HttpOnly cookie"""
     pool = await get_db_pool()
@@ -359,15 +353,12 @@ async def login(request: Request, credentials: UserLogin, response: Response):
         
         if not user or not verify_password(credentials.password, user["password_hash"]):
             logger.warning(f"Failed login attempt for: {credentials.email}")
-            # Generic error message to prevent user enumeration
             raise HTTPException(status_code=401, detail="Invalid email or password")
         
         logger.info(f"Successful login: {user['email']}")
         
-        # Create token
         token = create_access_token(user["id"], user["email"])
         
-        # Set HttpOnly cookie
         response.set_cookie(
             key="access_token",
             value=token,
@@ -432,7 +423,7 @@ def health():
     return {"status": "ok", "device": str(device)}
 
 @app.post("/predict")
-@limiter.limit("10/minute")  # Rate limit: 10 predictions per minute per IP
+@limiter.limit("10/minute")
 async def predict(
     request: Request,
     file: UploadFile = File(...),
@@ -441,13 +432,9 @@ async def predict(
     """Predict leaf health (requires authentication)"""
     logger.info(f"Prediction request from user: {current_user['email']}")
     
-    # Read file
     img_bytes = await file.read()
-    
-    # Validate image
     img = validate_image_file(img_bytes)
     
-    # Preprocess and predict
     try:
         x = preprocess(img).unsqueeze(0).to(device)
         
@@ -459,7 +446,6 @@ async def predict(
         predicted_class = CLASS_NAMES[idx]
         confidence = float(probs[idx].item())
         
-        # Save analysis to database
         pool = await get_db_pool()
         async with pool.acquire() as conn:
             await conn.execute(

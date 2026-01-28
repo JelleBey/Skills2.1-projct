@@ -226,8 +226,8 @@
 </footer>
 
 <script>
+// ✅ NO HARDCODED IP - Uses relative URLs that work with any IP/domain!
 // SECURITY: No localStorage - all auth via HttpOnly cookies
-const API_URL = "http://44.195.35.212"; // AWS EC2 Instance
 
 // Real-time password validation feedback
 const passwordInput = document.getElementById('password');
@@ -329,7 +329,8 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
     submitBtn.textContent = 'Creating account...';
     
     try {
-        const response = await fetch(`${API_URL}/api/register`, {
+        // Relative URL - no hardcoded IP!
+        const response = await fetch('/api/register', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

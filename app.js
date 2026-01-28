@@ -1,12 +1,14 @@
-// ===== SECURITY HARDENED VERSION - COOKIES ONLY =====
-// NO localStorage - all auth via HttpOnly cookies
+// ===== SECURITY HARDENED VERSION - RELATIVE URLS ONLY =====
+// NO hardcoded IPs - works with any domain/IP automatically!
 
 // ===== Validation settings =====
 const MAX_FILE_SIZE_MB = 10;
 const ALLOWED_EXTENSIONS = ["jpg", "jpeg", "png", "webp"];
 
-// ✅ Your FastAPI endpoint
-const API_URL = "http://44.195.35.212/predict"; // AWS EC2 Instance
+// ✅ RELATIVE URLs - No hardcoded IP needed!
+// Works automatically regardless of what IP/domain you're using
+const API_BASE = "";  // Empty = same server
+const API_URL = "/predict";  // Relative path
 
 // ===== Elements =====
 const imageInput = document.getElementById("imageInput");
@@ -300,6 +302,7 @@ analyzeBtn.addEventListener("click", async () => {
     fd.append("file", selectedFile);
     
     // SECURITY: credentials: 'include' sends HttpOnly cookie
+    // Using relative URL - no hardcoded IP!
     const res = await fetch(API_URL, {
       method: "POST",
       credentials: "include",

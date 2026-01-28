@@ -151,8 +151,8 @@
 </footer>
 
 <script>
+// ✅ NO HARDCODED IP - Uses relative URLs that work with any IP/domain!
 // SECURITY: No localStorage - all auth via HttpOnly cookies
-const API_URL = "http://44.195.35.212"; // AWS EC2 Instance
 
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -173,7 +173,8 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     submitBtn.textContent = 'Logging in...';
     
     try {
-        const response = await fetch(`${API_URL}/api/login`, {
+        // Relative URL - no hardcoded IP!
+        const response = await fetch('/api/login', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
