@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Leaf Health Analyzer (Demo)</title>
+
+    <link rel="stylesheet" href="static/style.css" />
+    <script src="static/app.js" defer></script>
+
+    <style>
+        .user-menu {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .user-info {
+            font-size: 14px;
+            color: var(--muted);
+        }
+        .logout-btn {
+            padding: 8px 14px;
+            border-radius: 8px;
+            border: 1px solid var(--line);
+            background: rgba(239,68,68,0.14);
+            color: var(--text);
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 140ms ease;
+        }
+        .logout-btn:hover {
+            background: rgba(239,68,68,0.24);
+            transform: translateY(-1px);
+        }
+    </style>
+
+</head>
+<body>
+<header class="topbar">
+    <div class="container topbar__inner">
+        <div class="brand">
+            <div class="brand__logo" aria-hidden="true">🌿</div>
+            <div>
+                <h1 class="brand__title">Leaf Health Analyzer</h1>
+                <p class="brand__subtitle">Demo app (AI-based analysis)</p>
+            </div>
+        </div>
+        <div class="user-menu">
+            <div class="status-pill" id="statusPill">No image selected</div>
+            <button class="logout-btn" id="logoutBtn">Logout</button>
+        </div>
+    </div>
+</header>
+
+<main class="container layout">
+    <!-- LEFT: upload + preview -->
+    <section class="card">
+        <h2 class="card__title">1) Upload a leaf photo</h2>
+
+        <label class="dropzone" for="imageInput">
+            <input id="imageInput" type="file" accept="image/*" />
+            <div class="dropzone__content">
+                <p class="dropzone__headline">Tap to choose an image</p>
+                <p class="dropzone__hint">JPG/PNG/WebP supported • from your gallery</p>
+            </div>
+        </label>
+
+        <div class="preview">
+            <img id="previewImg" alt="Preview" />
+            <div class="preview__meta">
+                <div>
+                    <div class="meta__label">File name</div>
+                    <div class="meta__value" id="fileName">—</div>
+                </div>
+                <div>
+                    <div class="meta__label">Size</div>
+                    <div class="meta__value" id="fileSize">—</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="actions">
+            <button id="analyzeBtn" class="btn btn--primary" disabled>
+                Analyze
+            </button>
+            <button id="resetBtn" class="btn btn--ghost" disabled>
+                Reset
+            </button>
+        </div>
+        <p class="fineprint">
+            Demo prototype illustrating how an AI-based leaf health analysis system
+            could evaluate plant conditions and provide actionable feedback.
+        </p>
+    </section>
+
+    <!-- RIGHT: results -->
+    <section class="card">
+        <h2 class="card__title">2) Result</h2>
+
+        <div class="result" id="resultBox">
+            <div class="result__badge" id="resultBadge">Waiting…</div>
+            <div class="result__title" id="resultTitle">Upload an image to begin</div>
+            <p class="result__summary" id="resultSummary">
+                Select a photo and press Analyze. We'll generate a realistic report.
+            </p>
+
+            <div class="divider"></div>
+
+            <div class="grid2">
+                <div>
+                    <h3 class="mini-title">Observations</h3>
+                    <ul class="list" id="observations">
+                        <li>—</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="mini-title">Tips</h3>
+                    <ul class="list" id="tips">
+                        <li>—</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="remarks">
+                <h3 class="mini-title">Remarks</h3>
+                <p id="remarksText">—</p>
+            </div>
+        </div>
+    </section>
+</main>
+
+<footer class="footer">
+    <div class="container footer__inner">
+        <span>© Demo • Responsive layout • AI-based analysis</span>
+    </div>
+</footer>
+
+<script>
+// Logout functionality
+document.getElementById('logoutBtn').addEventListener('click', () => {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('user');
+    window.location.href = '/login.html';
+});
+</script>
+</body>
+</html>

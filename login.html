@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Login - Leaf Health Analyzer</title>
+    <link rel="stylesheet" href="static/style.css" />
+    <style>
+        .auth-container {
+            min-height: calc(100vh - 200px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 0;
+        }
+        .auth-card {
+            max-width: 420px;
+            width: 100%;
+        }
+        .form-group {
+            margin-bottom: 16px;
+        }
+        .form-label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 14px;
+            color: var(--muted);
+            font-weight: 600;
+        }
+        .form-input {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 12px;
+            border: 1px solid var(--line);
+            background: rgba(255,255,255,0.04);
+            color: var(--text);
+            font-size: 15px;
+            font-family: inherit;
+            transition: border-color 140ms ease, background 140ms ease;
+        }
+        .form-input:focus {
+            outline: none;
+            border-color: rgba(56,189,248,0.6);
+            background: rgba(255,255,255,0.06);
+        }
+        .form-input::placeholder {
+            color: rgba(255,255,255,0.35);
+        }
+        .error-message {
+            margin-top: 14px;
+            padding: 12px;
+            border-radius: 12px;
+            background: rgba(239,68,68,0.14);
+            border: 1px solid rgba(239,68,68,0.45);
+            color: var(--text);
+            font-size: 14px;
+            display: none;
+        }
+        .success-message {
+            margin-top: 14px;
+            padding: 12px;
+            border-radius: 12px;
+            background: rgba(34,197,94,0.14);
+            border: 1px solid rgba(34,197,94,0.45);
+            color: var(--text);
+            font-size: 14px;
+            display: none;
+        }
+        .auth-footer {
+            margin-top: 20px;
+            text-align: center;
+            color: var(--muted);
+            font-size: 14px;
+        }
+        .auth-footer a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .auth-footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+<header class="topbar">
+    <div class="container topbar__inner">
+        <div class="brand">
+            <div class="brand__logo" aria-hidden="true">🌿</div>
+            <div>
+                <h1 class="brand__title">Leaf Health Analyzer</h1>
+                <p class="brand__subtitle">Login to your account</p>
+            </div>
+        </div>
+    </div>
+</header>
+
+<main class="auth-container">
+    <div class="container">
+        <div class="card auth-card">
+            <h2 class="card__title">Welcome Back</h2>
+            
+            <form id="loginForm">
+                <div class="form-group">
+                    <label class="form-label" for="email">Email</label>
+                    <input 
+                        type="email" 
+                        id="email" 
+                        name="email" 
+                        class="form-input" 
+                        placeholder="your.email@example.com"
+                        required
+                    />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="password">Password</label>
+                    <input 
+                        type="password" 
+                        id="password" 
+                        name="password" 
+                        class="form-input" 
+                        placeholder="Enter your password"
+                        required
+                    />
+                </div>
+
+                <div class="actions">
+                    <button type="submit" class="btn btn--primary" style="flex: 1;">
+                        Login
+                    </button>
+                </div>
+
+                <div id="errorMessage" class="error-message"></div>
+                <div id="successMessage" class="success-message"></div>
+            </form>
+
+            <div class="auth-footer">
+                Don't have an account? <a href="register.html">Register here</a>
+            </div>
+        </div>
+    </div>
+</main>
+
+<footer class="footer">
+    <div class="container footer__inner">
+        <span>© Demo • Leaf Health Analyzer</span>
+    </div>
+</footer>
+
+<script>
+const API_URL = "http://127.0.0.1:8000"; // Change when hosting online
+
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const errorEl = document.getElementById('errorMessage');
+    const successEl = document.getElementById('successMessage');
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    
+    errorEl.style.display = 'none';
+    successEl.style.display = 'none';
+    
+    const formData = {
+        email: document.getElementById('email').value,
+        password: document.getElementById('password').value
+    };
+    
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Logging in...';
+    
+    try {
+        const response = await fetch(`${API_URL}/api/login`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(formData)
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Login failed');
+        }
+        
+        const data = await response.json();
+        
+        // Store token and user info
+        localStorage.setItem('access_token', data.access_token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        
+        // Show success message
+        successEl.textContent = 'Login successful! Redirecting...';
+        successEl.style.display = 'block';
+        
+        // Redirect to main app
+        setTimeout(() => {
+            window.location.href = '/';
+        }, 1000);
+        
+    } catch (error) {
+        errorEl.textContent = error.message;
+        errorEl.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Login';
+    }
+});
+</script>
+</body>
+</html>

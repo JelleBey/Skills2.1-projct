@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Register - Leaf Health Analyzer</title>
+    <link rel="stylesheet" href="static/style.css" />
+    <style>
+        .auth-container {
+            min-height: calc(100vh - 200px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 0;
+        }
+        .auth-card {
+            max-width: 420px;
+            width: 100%;
+        }
+        .form-group {
+            margin-bottom: 16px;
+        }
+        .form-label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 14px;
+            color: var(--muted);
+            font-weight: 600;
+        }
+        .form-input {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 12px;
+            border: 1px solid var(--line);
+            background: rgba(255,255,255,0.04);
+            color: var(--text);
+            font-size: 15px;
+            font-family: inherit;
+            transition: border-color 140ms ease, background 140ms ease;
+        }
+        .form-input:focus {
+            outline: none;
+            border-color: rgba(56,189,248,0.6);
+            background: rgba(255,255,255,0.06);
+        }
+        .form-input::placeholder {
+            color: rgba(255,255,255,0.35);
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        .error-message {
+            margin-top: 14px;
+            padding: 12px;
+            border-radius: 12px;
+            background: rgba(239,68,68,0.14);
+            border: 1px solid rgba(239,68,68,0.45);
+            color: var(--text);
+            font-size: 14px;
+            display: none;
+        }
+        .success-message {
+            margin-top: 14px;
+            padding: 12px;
+            border-radius: 12px;
+            background: rgba(34,197,94,0.14);
+            border: 1px solid rgba(34,197,94,0.45);
+            color: var(--text);
+            font-size: 14px;
+            display: none;
+        }
+        .auth-footer {
+            margin-top: 20px;
+            text-align: center;
+            color: var(--muted);
+            font-size: 14px;
+        }
+        .auth-footer a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .auth-footer a:hover {
+            text-decoration: underline;
+        }
+        .password-requirements {
+            margin-top: 6px;
+            font-size: 12px;
+            color: var(--muted);
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+<header class="topbar">
+    <div class="container topbar__inner">
+        <div class="brand">
+            <div class="brand__logo" aria-hidden="true">🌿</div>
+            <div>
+                <h1 class="brand__title">Leaf Health Analyzer</h1>
+                <p class="brand__subtitle">Create your account</p>
+            </div>
+        </div>
+    </div>
+</header>
+
+<main class="auth-container">
+    <div class="container">
+        <div class="card auth-card">
+            <h2 class="card__title">Create Account</h2>
+            
+            <form id="registerForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="firstName">First Name</label>
+                        <input 
+                            type="text" 
+                            id="firstName" 
+                            name="firstName" 
+                            class="form-input" 
+                            placeholder="John"
+                            required
+                        />
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="lastName">Last Name</label>
+                        <input 
+                            type="text" 
+                            id="lastName" 
+                            name="lastName" 
+                            class="form-input" 
+                            placeholder="Doe"
+                            required
+                        />
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="email">Email</label>
+                    <input 
+                        type="email" 
+                        id="email" 
+                        name="email" 
+                        class="form-input" 
+                        placeholder="your.email@example.com"
+                        required
+                    />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="password">Password</label>
+                    <input 
+                        type="password" 
+                        id="password" 
+                        name="password" 
+                        class="form-input" 
+                        placeholder="Create a secure password"
+                        required
+                        minlength="8"
+                    />
+                    <div class="password-requirements">
+                        Minimum 8 characters recommended
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="confirmPassword">Confirm Password</label>
+                    <input 
+                        type="password" 
+                        id="confirmPassword" 
+                        name="confirmPassword" 
+                        class="form-input" 
+                        placeholder="Re-enter your password"
+                        required
+                    />
+                </div>
+
+                <div class="actions">
+                    <button type="submit" class="btn btn--primary" style="flex: 1;">
+                        Create Account
+                    </button>
+                </div>
+
+                <div id="errorMessage" class="error-message"></div>
+                <div id="successMessage" class="success-message"></div>
+            </form>
+
+            <div class="auth-footer">
+                Already have an account? <a href="login.html">Login here</a>
+            </div>
+        </div>
+    </div>
+</main>
+
+<footer class="footer">
+    <div class="container footer__inner">
+        <span>© Demo • Leaf Health Analyzer</span>
+    </div>
+</footer>
+
+<script>
+const API_URL = "http://127.0.0.1:8000"; // Change when hosting online
+
+document.getElementById('registerForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const errorEl = document.getElementById('errorMessage');
+    const successEl = document.getElementById('successMessage');
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    
+    errorEl.style.display = 'none';
+    successEl.style.display = 'none';
+    
+    const password = document.getElementById('password').value;
+    const confirmPassword = document.getElementById('confirmPassword').value;
+    
+    // Validate passwords match
+    if (password !== confirmPassword) {
+        errorEl.textContent = 'Passwords do not match';
+        errorEl.style.display = 'block';
+        return;
+    }
+    
+    // Validate password length
+    if (password.length < 8) {
+        errorEl.textContent = 'Password must be at least 8 characters long';
+        errorEl.style.display = 'block';
+        return;
+    }
+    
+    const formData = {
+        email: document.getElementById('email').value,
+        password: password,
+        first_name: document.getElementById('firstName').value,
+        last_name: document.getElementById('lastName').value
+    };
+    
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Creating account...';
+    
+    try {
+        const response = await fetch(`${API_URL}/api/register`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(formData)
+        });
+        
+        if (!response.ok) {
+  const err = await response.json().catch(() => ({}));
+
+  let message = 'Registration failed';
+
+  // FastAPI validation errors (422)
+  if (Array.isArray(err.detail)) {
+    const emailError = err.detail.find(e => e.loc?.includes('email'));
+    if (emailError) {
+      message = 'Enter a valid email';
+    } else {
+      message = err.detail[0]?.msg || message;
+    }
+  } else if (typeof err.detail === 'string') {
+    message = err.detail;
+  }
+
+  throw new Error(message);
+}
+
+        
+        const data = await response.json();
+        
+        // Store token and user info
+        localStorage.setItem('access_token', data.access_token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        
+        // Show success message
+        successEl.textContent = 'Account created successfully! Redirecting...';
+        successEl.style.display = 'block';
+        
+        // Redirect to main app
+        setTimeout(() => {
+            window.location.href = '/';
+        }, 1000);
+        
+    } catch (error) {
+        errorEl.textContent = error.message;
+        errorEl.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Create Account';
+    }
+});
+</script>
+</body>
+</html>
