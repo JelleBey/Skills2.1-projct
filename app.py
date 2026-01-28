@@ -29,7 +29,7 @@ app = FastAPI()
 # ---------- CORS ----------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:8000", "http://localhost:8000"],  # Specific origins for cookie support
+    allow_origins=["http://44.195.35.212", "http://44.195.35.212:8000", "*"],  # AWS EC2 Instance
     allow_credentials=True,  # Required for HttpOnly cookie auth
     allow_methods=["*"],
     allow_headers=["*"],
@@ -193,10 +193,22 @@ async def shutdown():
     await close_db_pool()
 
 # ---------- Routes ----------
-@app.get("/", response_class=HTMLResponse)
-async def index(current_user: dict = Depends(get_current_user_from_cookie)):
-    """Serve index.html only to authenticated users"""
-    return (BASE_DIR / "index.html").read_text(encoding="utf-8")
+@app.get("/")
+async def index(access_token: Optional[str] = Cookie(None)):
+    """Serve index.html only to authenticated users, redirect otherwise"""
+    # If no cookie, redirect to login
+    if not access_token:
+        return RedirectResponse(url="/login.html", status_code=303)
+    
+    # Verify the token is valid
+    try:
+        decode_token(access_token)
+    except HTTPException:
+        # Invalid/expired token - redirect to login
+        return RedirectResponse(url="/login.html", status_code=303)
+    
+    # User is authenticated - serve the page
+    return HTMLResponse((BASE_DIR / "index.html").read_text(encoding="utf-8"))
 
 @app.get("/login.html", response_class=HTMLResponse)
 def login_page():

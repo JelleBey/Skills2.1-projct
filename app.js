@@ -3,7 +3,7 @@ const MAX_FILE_SIZE_MB = 10;
 const ALLOWED_EXTENSIONS = ["jpg", "jpeg", "png", "webp"];
 
 // ✅ Your FastAPI endpoint
-const API_URL = "http://127.0.0.1:8000/predict"; // change later when hosting online
+const API_URL = "http://44.195.35.212/predict"; // AWS EC2 Instance
 
 // ===== Elements =====
 const imageInput = document.getElementById("imageInput");
