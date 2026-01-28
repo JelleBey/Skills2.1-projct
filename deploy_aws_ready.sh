@@ -1,197 +1,138 @@
 #!/bin/bash
-# DEPLOYMENT SCRIPT FOR AWS EC2: 44.195.35.212
-# Leaf Health Analyzer - Ready to Deploy!
+# Leaf Health Analyzer - AWS Deploy Script
 
 set -e
 
 echo "=========================================="
 echo "🚀 Deploying Leaf Health Analyzer"
-echo "📍 EC2 Instance: 44.195.35.212"
 echo "=========================================="
 echo ""
 
-# Check if we're in the right directory
-if [ ! -f "app.py" ] || [ ! -f "tomato_model.pt" ]; then
-    echo "❌ Error: Please run this script from ~/leaf-health-app directory"
-    echo "   Make sure all files are uploaded first!"
-    exit 1
-fi
+# ✅ SET YOUR REAL PROJECT PATH HERE
+PROJECT_DIR="/home/ubuntu/Skills2.1-projct"
 
-# Verify files are configured for AWS
-if ! grep -q "44.195.35.212" app.js; then
-    echo "⚠️  Warning: app.js may not be configured for AWS"
-    echo "   Please make sure you uploaded the AWS-ready files!"
-fi
+APP_USER="ubuntu"
+SERVICE_NAME="leaf-health"
+APP_HOST="0.0.0.0"
+APP_PORT="8000"
 
-echo "✅ Files detected. Starting deployment..."
+echo "📁 Project directory: $PROJECT_DIR"
 echo ""
+
+# Basic checks
+if [ ! -d "$PROJECT_DIR" ]; then
+  echo "❌ Error: PROJECT_DIR does not exist: $PROJECT_DIR"
+  exit 1
+fi
+
+if [ ! -f "$PROJECT_DIR/app.py" ]; then
+  echo "❌ Error: app.py not found in $PROJECT_DIR"
+  exit 1
+fi
+
+if [ ! -f "$PROJECT_DIR/requirements.txt" ]; then
+  echo "❌ Error: requirements.txt not found in $PROJECT_DIR"
+  exit 1
+fi
 
 # Step 1: Update system
 echo "[1/9] Updating system..."
 sudo apt update -qq && sudo apt upgrade -y -qq
 echo "   ✅ System updated"
 
-# Step 2: Install Python 3.11
-echo "[2/9] Installing Python 3.11..."
-sudo apt install -y -qq software-properties-common
-sudo add-apt-repository -y ppa:deadsnakes/ppa > /dev/null 2>&1
+# Step 2: Install Python + Nginx
+echo "[2/9] Installing Python 3.11 + Nginx..."
+sudo apt install -y -qq software-properties-common nginx
+sudo add-apt-repository -y ppa:deadsnakes/ppa > /dev/null 2>&1 || true
 sudo apt update -qq
-sudo apt install -y -qq python3.11 python3.11-venv python3.11-dev python3-pip nginx
-
-PYTHON_VERSION=$(python3.11 --version)
-echo "   ✅ $PYTHON_VERSION installed"
+sudo apt install -y -qq python3.11 python3.11-venv python3.11-dev python3-pip
+echo "   ✅ Installed Python 3.11 and Nginx"
 
 # Step 3: Create virtual environment
-echo "[3/9] Creating Python virtual environment..."
+echo "[3/9] Creating venv..."
+cd "$PROJECT_DIR"
 python3.11 -m venv venv
-source venv/bin/activate
+source "$PROJECT_DIR/venv/bin/activate"
 pip install -q --upgrade pip
-echo "   ✅ Virtual environment ready"
+echo "   ✅ venv ready"
 
 # Step 4: Install dependencies
-echo "[4/9] Installing Python dependencies..."
-echo "   This may take 3-5 minutes for PyTorch..."
-pip install -q -r requirements.txt
+echo "[4/9] Installing dependencies..."
+pip install -q -r "$PROJECT_DIR/requirements.txt"
 echo "   ✅ Dependencies installed"
 
-# Step 5: Verify configuration
-echo "[5/9] Verifying AWS configuration..."
-if grep -q "44.195.35.212" app.js && grep -q "44.195.35.212" login.html && grep -q "44.195.35.212" register.html; then
-    echo "   ✅ All files configured for AWS"
-else
-    echo "   ⚠️  Warning: Some files may not be AWS-ready"
+# Step 5: Check .env (required by your original script logic)
+echo "[5/9] Checking .env..."
+if [ ! -f "$PROJECT_DIR/.env" ]; then
+  echo "❌ ERROR: .env not found in $PROJECT_DIR"
+  echo "   Create /home/ubuntu/Skills2.1-projct/.env"
+  exit 1
 fi
+echo "   ✅ .env found"
 
-# Step 6: Check .env file
-echo "[6/9] Checking environment variables..."
-if [ ! -f ".env" ]; then
-    echo "   ❌ ERROR: .env file not found!"
-    echo "   Please create .env file with your database URL"
-    exit 1
-fi
-
-if grep -q "your_database_url_here" .env; then
-    echo "   ⚠️  Warning: .env contains placeholder database URL"
-    echo "   Please update .env with your actual Neon database URL"
-    read -p "   Press Enter to continue or Ctrl+C to cancel..."
-fi
-echo "   ✅ .env file found"
-
-# Step 7: Create systemd service
-echo "[7/9] Creating systemd service..."
-sudo tee /etc/systemd/system/leaf-health.service > /dev/null <<'EOF'
+# Step 6: Create systemd service
+echo "[6/9] Creating systemd service..."
+sudo tee "/etc/systemd/system/${SERVICE_NAME}.service" > /dev/null <<EOF
 [Unit]
-Description=Leaf Health Analyzer FastAPI Application
+Description=Leaf Health Analyzer (Uvicorn/FastAPI)
 After=network.target
 
 [Service]
 Type=simple
-User=ubuntu
-WorkingDirectory=/home/ubuntu/leaf-health-app
-Environment="PATH=/home/ubuntu/leaf-health-app/venv/bin"
-EnvironmentFile=/home/ubuntu/leaf-health-app/.env
-ExecStart=/home/ubuntu/leaf-health-app/venv/bin/uvicorn app:app --host 0.0.0.0 --port 8000
+User=${APP_USER}
+WorkingDirectory=${PROJECT_DIR}
+Environment="PATH=${PROJECT_DIR}/venv/bin"
+EnvironmentFile=${PROJECT_DIR}/.env
+ExecStart=${PROJECT_DIR}/venv/bin/uvicorn app:app --host ${APP_HOST} --port ${APP_PORT}
 Restart=always
-RestartSec=10
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
 sudo systemctl daemon-reload
-sudo systemctl enable leaf-health
-sudo systemctl start leaf-health
-sleep 2
-echo "   ✅ Service created and started"
+sudo systemctl enable "${SERVICE_NAME}"
+sudo systemctl restart "${SERVICE_NAME}"
+echo "   ✅ systemd service started"
 
-# Step 8: Configure Nginx
-echo "[8/9] Configuring Nginx reverse proxy..."
-sudo tee /etc/nginx/sites-available/leaf-health > /dev/null <<'EOF'
+# Step 7: Configure Nginx reverse proxy
+echo "[7/9] Configuring Nginx..."
+sudo tee "/etc/nginx/sites-available/${SERVICE_NAME}" > /dev/null <<EOF
 server {
     listen 80;
     server_name _;
-    client_max_body_size 10M;
-    root /home/ubuntu/leaf-health-app;
 
-    # Serve static files
-    location /static/ {
-        alias /home/ubuntu/leaf-health-app/;
-        expires 1d;
-        add_header Cache-Control "public, immutable";
-    }
+    client_max_body_size 20M;
 
-    # Serve HTML files directly
-    location ~ \.(html)$ {
-        try_files $uri $uri/ =404;
-    }
-
-    # API and other requests go to FastAPI
     location / {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_pass http://127.0.0.1:${APP_PORT};
+        proxy_http_version 1.1;
+
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
     }
 }
 EOF
 
 sudo rm -f /etc/nginx/sites-enabled/default
-sudo ln -sf /etc/nginx/sites-available/leaf-health /etc/nginx/sites-enabled/
-sudo nginx -t > /dev/null 2>&1 && echo "   ✅ Nginx configuration valid"
+sudo ln -sf "/etc/nginx/sites-available/${SERVICE_NAME}" "/etc/nginx/sites-enabled/${SERVICE_NAME}"
+
+sudo nginx -t
 sudo systemctl restart nginx
 echo "   ✅ Nginx configured and restarted"
 
-# Step 9: Final verification
-echo "[9/9] Running final checks..."
-sleep 3
+# Step 8: Show service status
+echo "[8/9] Service status..."
+sudo systemctl --no-pager --full status "${SERVICE_NAME}" || true
 
-# Check FastAPI service
-if sudo systemctl is-active --quiet leaf-health; then
-    echo "   ✅ FastAPI service is running"
-else
-    echo "   ❌ FastAPI service failed!"
-    echo "   Run: sudo journalctl -u leaf-health -n 50"
-    exit 1
-fi
-
-# Check Nginx
-if sudo systemctl is-active --quiet nginx; then
-    echo "   ✅ Nginx is running"
-else
-    echo "   ❌ Nginx failed!"
-    exit 1
-fi
-
-# Test if app responds
-sleep 2
-if curl -s http://localhost:8000/health > /dev/null 2>&1; then
-    echo "   ✅ Application responding to requests"
-else
-    echo "   ⚠️  Application may still be starting up..."
-fi
-
+# Step 9: Final info
+echo "[9/9] Done."
+echo "✅ App should be reachable on: http://<your-ec2-public-ip>/"
 echo ""
-echo "=========================================="
-echo "🎉 DEPLOYMENT COMPLETE!"
-echo "=========================================="
-echo ""
-echo "Your Leaf Health Analyzer is now live at:"
-echo ""
-echo "   🌐 http://44.195.35.212"
-echo ""
-echo "Test it:"
-echo "   - Register a new account"
-echo "   - Login"
-echo "   - Upload a tomato leaf image"
-echo "   - Get AI analysis!"
-echo ""
-echo "Useful Commands:"
-echo "   View logs:      sudo journalctl -u leaf-health -f"
-echo "   Restart app:    sudo systemctl restart leaf-health"
-echo "   Check status:   sudo systemctl status leaf-health"
-echo "   Stop instance:  (AWS Console) EC2 → Stop Instance"
-echo ""
-echo "💡 Remember: Stop your EC2 instance when not using it!"
-echo "   This saves your AWS Learner Lab budget."
-echo ""
+echo "Useful commands:"
+echo "  sudo systemctl status ${SERVICE_NAME}"
+echo "  sudo journalctl -u ${SERVICE_NAME} -n 200 --no-pager"
+echo "  sudo nginx -t"

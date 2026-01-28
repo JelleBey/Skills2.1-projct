@@ -1,305 +1,138 @@
-# 🚀 READY TO DEPLOY - EC2: 44.195.35.212
+#!/bin/bash
+# Leaf Health Analyzer - AWS Deploy Script
 
-## ✅ Your Files Are AWS-Ready!
+set -e
 
-All your files have been configured for your EC2 instance at **44.195.35.212**.
+echo "=========================================="
+echo "🚀 Deploying Leaf Health Analyzer"
+echo "=========================================="
+echo ""
 
-### What Was Changed:
-- ✅ **app.js** → API_URL changed to `http://44.195.35.212/predict`
-- ✅ **login.html** → API_URL changed to `http://44.195.35.212`
-- ✅ **register.html** → API_URL changed to `http://44.195.35.212`
-- ✅ **app.py** → CORS updated to allow your EC2 IP
-- ✅ **Python 3.11** deployment script included
+# ✅ SET YOUR REAL PROJECT PATH HERE
+PROJECT_DIR="/home/ubuntu/Skills2.1-projct"
 
----
+APP_USER="ubuntu"
+SERVICE_NAME="leaf-health"
+APP_HOST="0.0.0.0"
+APP_PORT="8000"
 
-## 📦 Step 1: Upload Files to EC2
+echo "📁 Project directory: $PROJECT_DIR"
+echo ""
 
-### Option A: Using SCP (Recommended)
+# Basic checks
+if [ ! -d "$PROJECT_DIR" ]; then
+  echo "❌ Error: PROJECT_DIR does not exist: $PROJECT_DIR"
+  exit 1
+fi
 
-**From your LOCAL computer**, open a terminal and run:
+if [ ! -f "$PROJECT_DIR/app.py" ]; then
+  echo "❌ Error: app.py not found in $PROJECT_DIR"
+  exit 1
+fi
 
-```bash
-# Navigate to where you downloaded the files
-cd ~/Downloads  # Or wherever you saved them
+if [ ! -f "$PROJECT_DIR/requirements.txt" ]; then
+  echo "❌ Error: requirements.txt not found in $PROJECT_DIR"
+  exit 1
+fi
 
-# Upload all files to EC2
-scp -i labsuser.pem \
-  app.js app.py index.html login.html register.html \
-  style.css requirements.txt .env tomato_model.pt \
-  deploy_aws_ready.sh \
-  ubuntu@44.195.35.212:~/leaf-health-app/
-```
+# Step 1: Update system
+echo "[1/9] Updating system..."
+sudo apt update -qq && sudo apt upgrade -y -qq
+echo "   ✅ System updated"
 
-### Option B: Upload One by One
+# Step 2: Install Python + Nginx
+echo "[2/9] Installing Python 3.11 + Nginx..."
+sudo apt install -y -qq software-properties-common nginx
+sudo add-apt-repository -y ppa:deadsnakes/ppa > /dev/null 2>&1 || true
+sudo apt update -qq
+sudo apt install -y -qq python3.11 python3.11-venv python3.11-dev python3-pip
+echo "   ✅ Installed Python 3.11 and Nginx"
 
-If the above doesn't work, upload files individually:
+# Step 3: Create virtual environment
+echo "[3/9] Creating venv..."
+cd "$PROJECT_DIR"
+python3.11 -m venv venv
+source "$PROJECT_DIR/venv/bin/activate"
+pip install -q --upgrade pip
+echo "   ✅ venv ready"
 
-```bash
-scp -i labsuser.pem app.js ubuntu@44.195.35.212:~/leaf-health-app/
-scp -i labsuser.pem app.py ubuntu@44.195.35.212:~/leaf-health-app/
-scp -i labsuser.pem index.html ubuntu@44.195.35.212:~/leaf-health-app/
-scp -i labsuser.pem login.html ubuntu@44.195.35.212:~/leaf-health-app/
-scp -i labsuser.pem register.html ubuntu@44.195.35.212:~/leaf-health-app/
-scp -i labsuser.pem style.css ubuntu@44.195.35.212:~/leaf-health-app/
-scp -i labsuser.pem requirements.txt ubuntu@44.195.35.212:~/leaf-health-app/
-scp -i labsuser.pem .env ubuntu@44.195.35.212:~/leaf-health-app/
-scp -i labsuser.pem tomato_model.pt ubuntu@44.195.35.212:~/leaf-health-app/
-scp -i labsuser.pem deploy_aws_ready.sh ubuntu@44.195.35.212:~/leaf-health-app/
-```
+# Step 4: Install dependencies
+echo "[4/9] Installing dependencies..."
+pip install -q -r "$PROJECT_DIR/requirements.txt"
+echo "   ✅ Dependencies installed"
 
----
+# Step 5: Check .env (required by your original script logic)
+echo "[5/9] Checking .env..."
+if [ ! -f "$PROJECT_DIR/.env" ]; then
+  echo "❌ ERROR: .env not found in $PROJECT_DIR"
+  echo "   Create /home/ubuntu/Skills2.1-projct/.env"
+  exit 1
+fi
+echo "   ✅ .env found"
 
-## 🔧 Step 2: Connect to EC2
+# Step 6: Create systemd service
+echo "[6/9] Creating systemd service..."
+sudo tee "/etc/systemd/system/${SERVICE_NAME}.service" > /dev/null <<EOF
+[Unit]
+Description=Leaf Health Analyzer (Uvicorn/FastAPI)
+After=network.target
 
-In your **AWS Learner Lab terminal** (or any terminal):
+[Service]
+Type=simple
+User=${APP_USER}
+WorkingDirectory=${PROJECT_DIR}
+Environment="PATH=${PROJECT_DIR}/venv/bin"
+EnvironmentFile=${PROJECT_DIR}/.env
+ExecStart=${PROJECT_DIR}/venv/bin/uvicorn app:app --host ${APP_HOST} --port ${APP_PORT}
+Restart=always
+RestartSec=5
 
-```bash
-ssh -i ~/.ssh/labsuser.pem ubuntu@44.195.35.212
-```
+[Install]
+WantedBy=multi-user.target
+EOF
 
-Type `yes` if asked about connecting.
+sudo systemctl daemon-reload
+sudo systemctl enable "${SERVICE_NAME}"
+sudo systemctl restart "${SERVICE_NAME}"
+echo "   ✅ systemd service started"
 
----
+# Step 7: Configure Nginx reverse proxy
+echo "[7/9] Configuring Nginx..."
+sudo tee "/etc/nginx/sites-available/${SERVICE_NAME}" > /dev/null <<EOF
+server {
+    listen 80;
+    server_name _;
 
-## 🎯 Step 3: Create App Directory (If Needed)
+    client_max_body_size 20M;
 
-```bash
-mkdir -p ~/leaf-health-app
-cd ~/leaf-health-app
-```
+    location / {
+        proxy_pass http://127.0.0.1:${APP_PORT};
+        proxy_http_version 1.1;
 
----
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+EOF
 
-## ⚡ Step 4: Deploy with ONE Command
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo ln -sf "/etc/nginx/sites-available/${SERVICE_NAME}" "/etc/nginx/sites-enabled/${SERVICE_NAME}"
 
-After uploading files and connecting to EC2:
-
-```bash
-cd ~/leaf-health-app
-chmod +x deploy_aws_ready.sh
-./deploy_aws_ready.sh
-```
-
-**That's it!** The script will:
-1. ✅ Install Python 3.11
-2. ✅ Create virtual environment
-3. ✅ Install all dependencies (PyTorch, FastAPI, etc.)
-4. ✅ Verify your files are AWS-ready
-5. ✅ Create systemd service
-6. ✅ Configure Nginx
-7. ✅ Start your application
-
-Takes about 5-10 minutes total.
-
----
-
-## 🌐 Step 5: Access Your App!
-
-Open your browser and go to:
-
-```
-http://44.195.35.212
-```
-
-You should see your login page!
-
-### Test the app:
-1. Click "Register here"
-2. Create a new account
-3. Login
-4. Upload a tomato leaf image
-5. Click "Analyze"
-6. See the AI prediction! 🎉
-
----
-
-## 🔍 Troubleshooting
-
-### Check if service is running:
-```bash
-sudo systemctl status leaf-health
-```
-
-### View logs:
-```bash
-# Real-time logs
-sudo journalctl -u leaf-health -f
-
-# Last 50 log lines
-sudo journalctl -u leaf-health -n 50
-```
-
-### Check Nginx:
-```bash
-sudo systemctl status nginx
-```
-
-### Test the app locally:
-```bash
-curl http://localhost:8000/health
-# Should return: {"status":"ok","device":"cpu"}
-```
-
-### Restart everything:
-```bash
-sudo systemctl restart leaf-health
+sudo nginx -t
 sudo systemctl restart nginx
-```
+echo "   ✅ Nginx configured and restarted"
 
-### App won't start?
-Check for errors:
-```bash
-sudo journalctl -u leaf-health -n 100 --no-pager
-```
+# Step 8: Show service status
+echo "[8/9] Service status..."
+sudo systemctl --no-pager --full status "${SERVICE_NAME}" || true
 
-Most common issues:
-- ❌ .env file missing or has wrong database URL
-- ❌ tomato_model.pt file not uploaded
-- ❌ Port 80 not open in security group
-
----
-
-## 📋 Useful Commands
-
-```bash
-# Start service
-sudo systemctl start leaf-health
-
-# Stop service
-sudo systemctl stop leaf-health
-
-# Restart service
-sudo systemctl restart leaf-health
-
-# View logs (real-time)
-sudo journalctl -u leaf-health -f
-
-# Check if port 8000 is listening
-sudo lsof -i :8000
-
-# Check if port 80 is listening
-sudo lsof -i :80
-
-# Test health endpoint
-curl http://localhost:8000/health
-```
-
----
-
-## 💰 Budget Management
-
-**IMPORTANT:** Your EC2 instance costs money while running!
-
-### Cost:
-- **t3.medium**: ~$0.04/hour = ~$1/day
-- If you run it 24/7 for a month: ~$30
-
-### Stop Instance When Done:
-1. Go to AWS Console
-2. EC2 → Instances
-3. Select your instance
-4. Actions → Instance State → **Stop**
-
-### Restart Later:
-1. Actions → Instance State → **Start**
-2. **Note:** Public IP will change!
-3. You'll need to re-run the deployment with the new IP
-
----
-
-## 🔐 Security Notes
-
-Current setup (for learning):
-- ✅ HTTP (not HTTPS)
-- ✅ CORS allows all origins
-- ✅ Basic authentication with JWT
-
-For production, you'd want:
-- HTTPS with SSL certificate
-- Restricted CORS
-- Rate limiting
-- Firewall rules
-
----
-
-## 📁 File Checklist
-
-Make sure all these files are in `/home/ubuntu/leaf-health-app/`:
-
-```
-✅ app.py                    # FastAPI backend
-✅ app.js                    # Frontend JavaScript
-✅ index.html                # Main page
-✅ login.html                # Login page
-✅ register.html             # Registration page
-✅ style.css                 # Styles
-✅ requirements.txt          # Python dependencies
-✅ .env                      # Environment variables
-✅ tomato_model.pt           # PyTorch model (16MB)
-✅ deploy_aws_ready.sh       # Deployment script
-```
-
----
-
-## ✅ Success Indicators
-
-Your app is working if:
-
-1. ✅ `sudo systemctl status leaf-health` shows "active (running)" in green
-2. ✅ `curl http://localhost:8000/health` returns `{"status":"ok"}`
-3. ✅ Browser can load `http://44.195.35.212`
-4. ✅ Can register a new user
-5. ✅ Can login
-6. ✅ Can upload and analyze images
-7. ✅ No errors in browser console (F12 → Console)
-
----
-
-## 🆘 Still Having Issues?
-
-### Database connection error?
-Check your .env file:
-```bash
-cat .env
-```
-
-Make sure DATABASE_URL is correct (starts with `postgresql://`)
-
-### Model not loading?
-Check if file exists:
-```bash
-ls -lh tomato_model.pt
-# Should show ~16MB file
-```
-
-### Can't access from browser?
-1. Check security group in EC2 console
-2. Make sure port 80 is open to 0.0.0.0/0
-3. Try accessing: `http://44.195.35.212/health`
-
-### Python errors?
-Make sure you're using Python 3.11:
-```bash
-source ~/leaf-health-app/venv/bin/activate
-python --version  # Should say 3.11.x
-```
-
----
-
-## 🎉 You're All Set!
-
-Your Leaf Health Analyzer is ready to deploy on AWS!
-
-**Quick Start:**
-1. Upload files with SCP
-2. SSH into EC2
-3. Run `./deploy_aws_ready.sh`
-4. Visit `http://44.195.35.212`
-
-**Questions?** Check the logs:
-```bash
-sudo journalctl -u leaf-health -f
-```
-
-**Have fun with your AI-powered plant health analyzer!** 🌿🚀
+# Step 9: Final info
+echo "[9/9] Done."
+echo "✅ App should be reachable on: http://<your-ec2-public-ip>/"
+echo ""
+echo "Useful commands:"
+echo "  sudo systemctl status ${SERVICE_NAME}"
+echo "  sudo journalctl -u ${SERVICE_NAME} -n 200 --no-pager"
+echo "  sudo nginx -t"
