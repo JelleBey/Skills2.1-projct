@@ -110,6 +110,7 @@
                         class="form-input" 
                         placeholder="your.email@example.com"
                         required
+                        autocomplete="email"
                     />
                 </div>
 
@@ -122,6 +123,7 @@
                         class="form-input" 
                         placeholder="Enter your password"
                         required
+                        autocomplete="current-password"
                     />
                 </div>
 
@@ -149,6 +151,7 @@
 </footer>
 
 <script>
+// SECURITY: No localStorage - all auth via HttpOnly cookies
 const API_URL = "http://44.195.35.212"; // AWS EC2 Instance
 
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
@@ -175,19 +178,20 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
             headers: {
                 'Content-Type': 'application/json',
             },
+            credentials: 'include', // Important: Include cookies
             body: JSON.stringify(formData)
         });
         
+        if (response.status === 429) {
+            throw new Error('Too many login attempts. Please wait a moment and try again.');
+        }
+        
         if (!response.ok) {
-            const error = await response.json();
+            const error = await response.json().catch(() => ({}));
             throw new Error(error.detail || 'Login failed');
         }
         
         const data = await response.json();
-        
-        // Store token and user info
-        localStorage.setItem('access_token', data.access_token);
-        localStorage.setItem('user', JSON.stringify(data.user));
         
         // Show success message
         successEl.textContent = 'Login successful! Redirecting...';

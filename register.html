@@ -89,7 +89,17 @@
             margin-top: 6px;
             font-size: 12px;
             color: var(--muted);
-            line-height: 1.4;
+            line-height: 1.6;
+        }
+        .password-requirements ul {
+            margin: 4px 0 0 0;
+            padding-left: 18px;
+        }
+        .password-requirements li {
+            margin-bottom: 2px;
+        }
+        .requirement-met {
+            color: var(--good);
         }
     </style>
 </head>
@@ -122,6 +132,8 @@
                             class="form-input" 
                             placeholder="John"
                             required
+                            maxlength="50"
+                            autocomplete="given-name"
                         />
                     </div>
 
@@ -134,6 +146,8 @@
                             class="form-input" 
                             placeholder="Doe"
                             required
+                            maxlength="50"
+                            autocomplete="family-name"
                         />
                     </div>
                 </div>
@@ -147,6 +161,7 @@
                         class="form-input" 
                         placeholder="your.email@example.com"
                         required
+                        autocomplete="email"
                     />
                 </div>
 
@@ -157,12 +172,20 @@
                         id="password" 
                         name="password" 
                         class="form-input" 
-                        placeholder="Create a secure password"
+                        placeholder="Create a strong password"
                         required
-                        minlength="8"
+                        minlength="12"
+                        autocomplete="new-password"
                     />
                     <div class="password-requirements">
-                        Minimum 8 characters recommended
+                        Password must contain:
+                        <ul id="passwordChecks">
+                            <li id="check-length">At least 12 characters</li>
+                            <li id="check-upper">One uppercase letter (A-Z)</li>
+                            <li id="check-lower">One lowercase letter (a-z)</li>
+                            <li id="check-number">One number (0-9)</li>
+                            <li id="check-special">One special character (!@#$%...)</li>
+                        </ul>
                     </div>
                 </div>
 
@@ -175,6 +198,7 @@
                         class="form-input" 
                         placeholder="Re-enter your password"
                         required
+                        autocomplete="new-password"
                     />
                 </div>
 
@@ -202,7 +226,60 @@
 </footer>
 
 <script>
+// SECURITY: No localStorage - all auth via HttpOnly cookies
 const API_URL = "http://44.195.35.212"; // AWS EC2 Instance
+
+// Real-time password validation feedback
+const passwordInput = document.getElementById('password');
+passwordInput.addEventListener('input', (e) => {
+    const password = e.target.value;
+    
+    // Check each requirement
+    const checks = {
+        'check-length': password.length >= 12,
+        'check-upper': /[A-Z]/.test(password),
+        'check-lower': /[a-z]/.test(password),
+        'check-number': /\d/.test(password),
+        'check-special': /[!@#$%^&*(),.?":{}|<>]/.test(password)
+    };
+    
+    // Update UI
+    Object.keys(checks).forEach(id => {
+        const el = document.getElementById(id);
+        if (checks[id]) {
+            el.classList.add('requirement-met');
+        } else {
+            el.classList.remove('requirement-met');
+        }
+    });
+});
+
+function validatePassword(password) {
+    const requirements = [];
+    
+    if (password.length < 12) {
+        requirements.push('at least 12 characters');
+    }
+    if (!/[A-Z]/.test(password)) {
+        requirements.push('one uppercase letter');
+    }
+    if (!/[a-z]/.test(password)) {
+        requirements.push('one lowercase letter');
+    }
+    if (!/\d/.test(password)) {
+        requirements.push('one number');
+    }
+    if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+        requirements.push('one special character');
+    }
+    
+    return requirements;
+}
+
+function sanitizeName(name) {
+    // Remove any non-letter, non-space, non-hyphen characters
+    return name.replace(/[^a-zA-Z\s\-]/g, '').trim();
+}
 
 document.getElementById('registerForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -224,18 +301,28 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
         return;
     }
     
-    // Validate password length
-    if (password.length < 8) {
-        errorEl.textContent = 'Password must be at least 8 characters long';
+    // Validate password requirements
+    const missing = validatePassword(password);
+    if (missing.length > 0) {
+        errorEl.textContent = `Password must contain: ${missing.join(', ')}`;
+        errorEl.style.display = 'block';
+        return;
+    }
+    
+    const firstName = sanitizeName(document.getElementById('firstName').value);
+    const lastName = sanitizeName(document.getElementById('lastName').value);
+    
+    if (!firstName || !lastName) {
+        errorEl.textContent = 'Name can only contain letters, spaces, and hyphens';
         errorEl.style.display = 'block';
         return;
     }
     
     const formData = {
-        email: document.getElementById('email').value,
+        email: document.getElementById('email').value.trim().toLowerCase(),
         password: password,
-        first_name: document.getElementById('firstName').value,
-        last_name: document.getElementById('lastName').value
+        first_name: firstName,
+        last_name: lastName
     };
     
     submitBtn.disabled = true;
@@ -247,35 +334,39 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
             headers: {
                 'Content-Type': 'application/json',
             },
+            credentials: 'include', // Important: Include cookies
             body: JSON.stringify(formData)
         });
         
+        if (response.status === 429) {
+            throw new Error('Too many registration attempts. Please wait and try again.');
+        }
+        
         if (!response.ok) {
-  const err = await response.json().catch(() => ({}));
-
-  let message = 'Registration failed';
-
-  // FastAPI validation errors (422)
-  if (Array.isArray(err.detail)) {
-    const emailError = err.detail.find(e => e.loc?.includes('email'));
-    if (emailError) {
-      message = 'Enter a valid email';
-    } else {
-      message = err.detail[0]?.msg || message;
-    }
-  } else if (typeof err.detail === 'string') {
-    message = err.detail;
-  }
-
-  throw new Error(message);
-}
-
+            const err = await response.json().catch(() => ({}));
+            
+            let message = 'Registration failed';
+            
+            // FastAPI validation errors (422)
+            if (Array.isArray(err.detail)) {
+                const emailError = err.detail.find(e => e.loc?.includes('email'));
+                const passwordError = err.detail.find(e => e.loc?.includes('password'));
+                
+                if (emailError) {
+                    message = 'Please enter a valid email address';
+                } else if (passwordError) {
+                    message = passwordError.msg || 'Password does not meet requirements';
+                } else {
+                    message = err.detail[0]?.msg || message;
+                }
+            } else if (typeof err.detail === 'string') {
+                message = err.detail;
+            }
+            
+            throw new Error(message);
+        }
         
         const data = await response.json();
-        
-        // Store token and user info
-        localStorage.setItem('access_token', data.access_token);
-        localStorage.setItem('user', JSON.stringify(data.user));
         
         // Show success message
         successEl.textContent = 'Account created successfully! Redirecting...';

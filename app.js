@@ -1,3 +1,6 @@
+// ===== SECURITY HARDENED VERSION - COOKIES ONLY =====
+// NO localStorage - all auth via HttpOnly cookies
+
 // ===== Validation settings =====
 const MAX_FILE_SIZE_MB = 10;
 const ALLOWED_EXTENSIONS = ["jpg", "jpeg", "png", "webp"];
@@ -25,35 +28,44 @@ const remarksText = document.getElementById("remarksText");
 let selectedFile = null;
 
 // ===== Authentication Helper =====
-function getAuthToken() {
-  return localStorage.getItem('access_token');
-}
-
-function isAuthenticated() {
-  return !!getAuthToken();
-}
+// SECURITY: All authentication via HttpOnly cookies
+// No localStorage used to prevent XSS token theft
 
 function redirectToLogin() {
   window.location.href = '/login.html';
 }
 
-function logout() {
-  localStorage.removeItem('access_token');
-  localStorage.removeItem('user');
+async function logout() {
+  try {
+    await fetch('/api/logout', {
+      method: 'POST',
+      credentials: 'include'
+    });
+  } catch (err) {
+    console.error('Logout error:', err);
+  }
   redirectToLogin();
 }
 
-// Check authentication on page load
-window.addEventListener('DOMContentLoaded', () => {
-  if (!isAuthenticated()) {
+// Check authentication on page load by trying to fetch user info
+window.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const response = await fetch('/api/me', {
+      credentials: 'include'
+    });
+    
+    if (!response.ok) {
+      redirectToLogin();
+      return;
+    }
+    
+    const user = await response.json();
+    if (user.first_name) {
+      statusPill.textContent = `Welcome, ${user.first_name}`;
+    }
+  } catch (err) {
+    console.error('Auth check error:', err);
     redirectToLogin();
-  }
-  
-  // Display user info if available
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-  if (user.first_name) {
-    const statusText = `Welcome, ${user.first_name}`;
-    statusPill.textContent = statusText;
   }
 });
 
@@ -168,7 +180,7 @@ function setResultFromModel(predClass, confidence) {
   resultTitle.textContent = `Detected: ${predClass}`;
   resultSummary.textContent = `Model confidence: ${formatPercent(confidence)}.`;
 
-  // simple disease-specific tips (edit later if you want)
+  // simple disease-specific tips
   const tipsByDisease = {
     early_blight: [
       "Remove heavily affected leaves.",
@@ -279,13 +291,6 @@ analyzeBtn.addEventListener("click", async () => {
     return;
   }
 
-  // Check authentication
-  if (!isAuthenticated()) {
-    showError("You must be logged in to analyze images.");
-    setTimeout(redirectToLogin, 2000);
-    return;
-  }
-
   setStatus("Analyzing…");
   setAnalyzingUI();
   analyzeBtn.disabled = true;
@@ -293,22 +298,25 @@ analyzeBtn.addEventListener("click", async () => {
   try {
     const fd = new FormData();
     fd.append("file", selectedFile);
-
-    const token = getAuthToken();
     
+    // SECURITY: credentials: 'include' sends HttpOnly cookie
     const res = await fetch(API_URL, {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${token}`
-      },
-      credentials: "include",  // Send cookies for dual auth support
+      credentials: "include",
       body: fd,
     });
 
     if (res.status === 401) {
-      // Token expired or invalid
-      logout();
-      throw new Error("Session expired. Please login again.");
+      // Session expired
+      showError("Session expired. Please login again.");
+      setTimeout(redirectToLogin, 2000);
+      return;
+    }
+
+    if (res.status === 429) {
+      showError("Too many requests. Please wait a moment and try again.");
+      analyzeBtn.disabled = false;
+      return;
     }
 
     if (!res.ok) {
@@ -322,7 +330,7 @@ analyzeBtn.addEventListener("click", async () => {
 
   } catch (err) {
     console.error(err);
-    showError(err.message || "Could not reach the AI server. Check API_URL / server running / CORS.");
+    showError(err.message || "Could not reach the AI server. Please try again.");
   } finally {
     analyzeBtn.disabled = false;
   }

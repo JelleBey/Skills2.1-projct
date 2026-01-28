@@ -1,16 +1,8 @@
-# Default ignored files
-/shelf/
-/workspace.xml
-# Editor-based HTTP Client requests
-/httpRequests/
-# Datasource local storage ignored files
-/dataSources/
-/dataSources.local.xml
-
-# Environment variables
+# Security - Never commit these!
 .env
-.env.local
-.env.*.local
+*.pem
+*.key
+*.log
 
 # Python
 __pycache__/
@@ -23,7 +15,11 @@ env/
 ENV/
 .venv
 
-# IDEs
+# PyTorch models (optional - these are large)
+# *.pt
+# *.pth
+
+# IDE
 .vscode/
 .idea/
 *.swp
@@ -34,6 +30,20 @@ ENV/
 .DS_Store
 Thumbs.db
 
-# Model files (optional - uncomment if you don't want to track the model)
-# *.pt
-# *.pth
+# Logs
+logs/
+*.log
+/var/log/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Deployment
+deploy.log
